@@ -19,6 +19,7 @@ from threading import Thread
 from socket import socket, AF_INET, SOCK_DGRAM
 from time import perf_counter, sleep
 from rc_controls import RemoteControl
+import pygame as pg
 
 class TelloRC:
   # Precond:
@@ -45,7 +46,9 @@ class TelloRC:
 
     # Threads
     self.send_thread = Thread(target=self.__send_rc)
+    self.send_thread.daemon = True
     self.receive_thread = Thread(target=self.__receive)
+    self.receive_thread.daemon = True
 
   # Precond:
   #   None.
@@ -54,12 +57,13 @@ class TelloRC:
   #   Attempts (up to 5 times) to connect to the Tello drone and start all needed threads.
   #   Returns True if connection was made.
   def connect(self):
+    self.active = True
+    # Starting needed threads
+    self.receive_thread.start()
     if not self.__connect():
       print("Problem connecting to drone.")
       return False
     self.active = True
-    # Starting needed threads
-    self.receive_thread.start()
     return True
 
   # Precond:
@@ -73,16 +77,24 @@ class TelloRC:
         print("Failure to connect")
         return
     running = True
+    print("Connected")
     control = RemoteControl()
     run_timer = perf_counter()
     frame_delta = 1/30
+    # Setup screen
+    if not pg.get_init():
+      pg.init()
+    screen = pg.display.set_mode((100, 100))
     while running:
       delta = perf_counter() - run_timer
       if delta >= frame_delta:
         control.update(frame_delta) #make sure we don't spike anything
         self.__send_rc(control.get_rc())
         action = control.next_action()
+        screen.fill((200, 200, 200))
+        pg.display.flip()
         if action is not None:
+          print(action)
           match action:
             case "TAKEOFF":
               if not self.flying:
@@ -107,8 +119,10 @@ class TelloRC:
       if self.flying:
         self.__send_cmd("land")
       self.active = False
+      self.send_channel.close()
       sleep(1)
       self.receive_thread.join()
+      pg.quit()
 
 
   # Precond:

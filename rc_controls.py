@@ -127,7 +127,7 @@ class RemoteControl:
         if not self.stick.get_init():
           self.stick.init()
         self.map = _Xbox_Map
-        self.action_map = _Xbox_Map
+        self.action_map = _Xbox_Action
       elif event.type == pg.JOYDEVICEREMOVED and self.mode == "joystick":
         self.mode = "keyboard"
         self.map = _Keyboard_Map
@@ -172,9 +172,12 @@ class RemoteControl:
   #   Uses the Pygame event system to determine if buttons have been pressed to perform actions.
   def __detect_actions(self):
     for event in pg.event.get([pg.JOYBUTTONDOWN, pg.KEYDOWN]):
+      print(event)
       if self.mode == "joystick" and event.type == pg.JOYBUTTONDOWN:
+        print(event.button)
         if event.button in self.action_map:
           self.__action_q.append(self.action_map[event.button])
+          print(self.__action_q)
       elif self.mode == "keyboard" and event.type == pg.KEYDOWN:
         if event.key in self.action_map:
           self.__action_q.append(self.action_map[event.key])
@@ -199,11 +202,11 @@ class RemoteControl:
         rc_state[_Z_IDX] = self.__btn_acc_curve(self.held_map["ZP"]) - self.__btn_acc_curve(self.held_map["ZM"])
         rc_state[_R_IDX] = self.__btn_acc_curve(self.held_map["RR"]) - self.__btn_acc_curve(self.held_map["RL"])
     elif self.map["Type"] == _AXIS:
-      rc_state[_X_IDX] = self.__acc_curve(round(self.stick.get_axis(self.map["X"]), 1))
-      rc_state[_Y_IDX] = self.__acc_curve(round(self.stick.get_axis(self.map["Y"]), 1))
-      rc_state[_Z_IDX] = -self.__acc_curve(round(self.stick.get_axis(self.map["Z"]), 1))
-      rr_val = self.__acc_curve((1 + self.stick.get_axis(self.map["RR"]))/2)
-      rl_val = self.__acc_curve((1 + self.stick.get_axis(self.map["RL"]))/2)
+      rc_state[_X_IDX] = round(self.stick.get_axis(self.map["X"]), 1)
+      rc_state[_Y_IDX] = -round(self.stick.get_axis(self.map["Y"]), 1)
+      rc_state[_Z_IDX] = -round(self.stick.get_axis(self.map["Z"]), 1)
+      rr_val = (1 + self.stick.get_axis(self.map["RR"]))/2
+      rl_val = (1 + self.stick.get_axis(self.map["RL"]))/2
       rc_state[_R_IDX] = (rr_val - rl_val)
     # Align the rc_state with api expectations
     for i in range(len(rc_state)):
