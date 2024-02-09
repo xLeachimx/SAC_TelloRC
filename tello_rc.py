@@ -20,6 +20,9 @@ from socket import socket, AF_INET, SOCK_DGRAM
 from time import perf_counter, sleep
 from rc_controls import RemoteControl
 import pygame as pg
+import cv2 as cv
+from datetime import datetime
+import random
 
 class TelloRC:
   # Precond:
@@ -35,6 +38,16 @@ class TelloRC:
     # Setup channels
     self.send_channel = socket(AF_INET, SOCK_DGRAM)
     self.send_channel.bind(self.local_addr)
+
+    # Video setup
+    self.video_connect_str = 'udp://192.168.10.1:11111'
+    self.video_stream = None
+    self.video_thread = Thread(target=self.__receive_video)
+    self.video_thread.daemon = True
+    self.last_frame = None
+    self.stream_active = False
+    self.frame_width = 0
+    self.frame_height = 0
 
     # Basic accounting variables
     self.flying = False
@@ -64,7 +77,29 @@ class TelloRC:
       print("Problem connecting to drone.")
       return False
     self.active = True
+    self.video_start()
     return True
+
+  # Precond:
+  #   None.
+  #
+  # Postcond:
+  #   Starts the state receiving thread.
+  def video_start(self):
+    # Set up the video stream
+    self.stream_active = True
+    self.video_stream = cv.VideoCapture(self.video_connect_str, cv.CAP_ANY)
+    self.frame_width = self.video_stream.get(cv.CAP_PROP_FRAME_WIDTH)
+    self.frame_height = self.video_stream.get(cv.CAP_PROP_FRAME_HEIGHT)
+    self.video_thread.start()
+
+  # Precond:
+  #   None.
+  #
+  # Postcond:
+  #   Returns the last grabbed video frame.
+  def get_frame(self):
+    return self.last_frame
 
   # Precond:
   #   None
@@ -84,17 +119,19 @@ class TelloRC:
     # Setup screen
     if not pg.get_init():
       pg.init()
-    screen = pg.display.set_mode((100, 100))
+    screen = pg.display.set_mode((1280, 720))
     while running:
       delta = perf_counter() - run_timer
       if delta >= frame_delta:
         control.update(frame_delta) #make sure we don't spike anything
         self.__send_rc(control.get_rc())
         action = control.next_action()
+        # Draw last frame grabbed
         screen.fill((200, 200, 200))
+        if self.last_frame is not None:
+          screen.blit(pg.image.frombuffer(self.last_frame.tobytes(), self.last_frame.shape[1::-1], "BGR"), (0, 0))
         pg.display.flip()
         if action is not None:
-          print(action)
           match action:
             case "TAKEOFF":
               if not self.flying:
@@ -102,6 +139,10 @@ class TelloRC:
               else:
                 self.__send_cmd("land")
               self.flying = not self.flying
+            case "PICTURE":
+              date = datetime.today().strftime("%b-%d-%y")
+              filename = "pic_" + date + f"-{random.randint(1,10**6)}.jpg"
+              cv.imwrite(filename, self.last_frame)
             case "STOP":
               running = False
             case _:
@@ -119,9 +160,12 @@ class TelloRC:
       if self.flying:
         self.__send_cmd("land")
       self.active = False
+      self.stream_active = False
       self.send_channel.close()
+      self.last_frame = None
       sleep(1)
       self.receive_thread.join()
+      self.video_thread.join()
       pg.quit()
 
 
@@ -139,6 +183,7 @@ class TelloRC:
       res = self.__send_cmd("command")
       if res is not None and res == 'ok':
         self.connected = True
+        self.__send_cmd("streamon")
         return True
     return False
 
@@ -200,6 +245,18 @@ class TelloRC:
         if self.active:
           self.cmd_log[-1][1] = "Decode Error"
           print("Caught exception Unicode 0xcc error.")
+
+  # Precond:
+  #   None.
+  #
+  # Postcond:
+  #   Receives video messages from the Tello.
+  def __receive_video(self):
+    while self.stream_active:
+      ret, img = self.video_stream.read()
+      if ret:
+        self.last_frame = img
+    self.video_stream.release()
 
 if __name__ == "__main__":
   drone = TelloRC()

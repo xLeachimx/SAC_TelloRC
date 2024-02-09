@@ -69,8 +69,8 @@ _Keyboard_Map = {
   "Type": _BUTTON,
   "XM": pg.K_a,
   "XP": pg.K_d,
-  "YM": pg.K_UP,
-  "YP": pg.K_DOWN,
+  "YM": pg.K_DOWN,
+  "YP": pg.K_UP,
   "ZM": pg.K_w,
   "ZP": pg.K_s,
   "RL": pg.K_q,
@@ -172,12 +172,9 @@ class RemoteControl:
   #   Uses the Pygame event system to determine if buttons have been pressed to perform actions.
   def __detect_actions(self):
     for event in pg.event.get([pg.JOYBUTTONDOWN, pg.KEYDOWN]):
-      print(event)
       if self.mode == "joystick" and event.type == pg.JOYBUTTONDOWN:
-        print(event.button)
         if event.button in self.action_map:
           self.__action_q.append(self.action_map[event.button])
-          print(self.__action_q)
       elif self.mode == "keyboard" and event.type == pg.KEYDOWN:
         if event.key in self.action_map:
           self.__action_q.append(self.action_map[event.key])
@@ -196,7 +193,7 @@ class RemoteControl:
         if pg.key.get_pressed()[self.map[key]]:
           self.held_map[key] += delta
         else:
-          self.held_map[key] = max(0.0, (self.held_map[key] - delta))
+          self.held_map[key] = max(0.0, (self.held_map[key] - 2*delta))
         rc_state[_X_IDX] = self.__btn_acc_curve(self.held_map["XP"]) - self.__btn_acc_curve(self.held_map["XM"])
         rc_state[_Y_IDX] = self.__btn_acc_curve(self.held_map["YP"]) - self.__btn_acc_curve(self.held_map["YM"])
         rc_state[_Z_IDX] = self.__btn_acc_curve(self.held_map["ZP"]) - self.__btn_acc_curve(self.held_map["ZM"])
