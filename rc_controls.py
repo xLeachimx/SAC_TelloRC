@@ -57,8 +57,7 @@ _Xbox_Map = {
   "Y": 1,
   "Z": 3,
   "RL": 4,
-  "RR": 5,
-  "R": 0
+  "RR": 5
 }
 
 _Xbox_FPS_Map = {
@@ -120,7 +119,7 @@ _Keyboard_Actions = {
 
 def _dz_axis_clamp(d_zone: float, val: float, positive: bool=False):
   if positive:
-    val = val + 1
+    val = (val + 1)/2
   if -d_zone < val < d_zone:
     return 0.0
   return val
@@ -164,6 +163,8 @@ class RemoteControl:
     # Also real poor management of controllers (> 1 might break system)
     for event in pg.event.get([pg.JOYDEVICEADDED, pg.JOYDEVICEREMOVED]):
       if event.type == pg.JOYDEVICEADDED and self.mode == "keyboard":
+        if event.device_index != 0:
+          continue
         self.mode = "joystick"
         self.stick = pg.joystick.Joystick(0)
         if not self.stick.get_init():
@@ -171,6 +172,8 @@ class RemoteControl:
         self.map = _Xbox_FPS_Map
         self.action_map = _Xbox_Action
       elif event.type == pg.JOYDEVICEREMOVED and self.mode == "joystick":
+        if event.device_index != 0:
+          continue
         self.mode = "keyboard"
         self.map = _Keyboard_Map
         self.action_map = _Keyboard_Actions
@@ -247,8 +250,8 @@ class RemoteControl:
       if "R" in self.map:
         rc_state[_R_IDX] = _dz_axis_clamp(0.5, self.stick.get_axis(self.map["R"]))
       else:
-        rr_val = (1 + self.stick.get_axis(self.map["RR"]))/2
-        rl_val = (1 + self.stick.get_axis(self.map["RL"]))/2
+        rr_val = _dz_axis_clamp(0.5, self.stick.get_axis(self.map["RR"]), True)
+        rl_val = _dz_axis_clamp(0.5, self.stick.get_axis(self.map["RL"]), True)
         rc_state[_R_IDX] = (rr_val - rl_val)
     # Align the rc_state with api expectations
     for i in range(len(rc_state)):
