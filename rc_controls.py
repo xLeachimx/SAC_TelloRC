@@ -7,6 +7,7 @@
 #   A class for managing input from both the keyboard and a controller.
 # Supported Controllers:
 #     Xbox series X
+#     Playstation 4 (untested)
 # Notes:
 #
 # Xbox series X button and stick map
@@ -37,9 +38,9 @@
 #      5    | Right  Trigger
 
 import pygame as pg
-from threading import Thread
 from math import log
 from time import perf_counter
+from datetime import datetime
 
 # Important constants
 _BUTTON = 0
@@ -86,6 +87,21 @@ _Keyboard_Map = {
   "ZM": pg.K_s,
   "RL": pg.K_q,
   "RR": pg.K_e
+}
+
+_KEYMAP_EXPAND = {
+  "Type": "Button",
+  "XM": "Move Left",
+  "XP": "Move Right",
+  "YM": "Move Down",
+  "YP": "Move Up",
+  "ZP": "Move Forward",
+  "ZM": "Move Backward",
+  "RL": "Rotate Left (counter clockwise)",
+  "RR": "Rotate Right (clockwise)",
+  "X" : "Left/Right Axis",
+  "Y" : "Up/Down Axis",
+  "Z" : "Forward/Backward Axis",
 }
 
 _Keyboard_Actions = {
@@ -256,6 +272,19 @@ class RemoteControl:
 
 
 def _main():
+  # Output the button map
+  print("Keyboard Control Scheme")
+  for item in _Keyboard_Map:
+    key_name = pg.key.name(_Keyboard_Map[item])
+    if key_name:
+      print(pg.key.name(_Keyboard_Map[item]), "->", _KEYMAP_EXPAND[item])
+    else:
+      print(item, "->", _KEYMAP_EXPAND[item])
+  for item in _Keyboard_Actions:
+    key_name = pg.key.name(item)
+    if key_name:
+      print(key_name, "->", _Keyboard_Actions[item])
+  print(datetime.today().strftime("%b-%d-%y"))
   # Test the controls
   pg.init()
   screen = pg.display.set_mode((500, 250))
