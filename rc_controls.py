@@ -74,7 +74,11 @@ _Xbox_FPS_Map = {
 _Xbox_Action = {
   6: "TAKEOFF",
   15: "PICTURE",
-  1: "STOP"
+  1: "STOP",
+  11: "FLIP F",
+  13: "FLIP L",
+  12: "FLIP B",
+  14: "FLIP R"
 }
 
 _Keyboard_Map = {
@@ -107,13 +111,17 @@ _KEYMAP_EXPAND = {
 _Keyboard_Actions = {
   pg.K_SPACE: "TAKEOFF",
   pg.K_p: "PICTURE",
-  pg.K_ESCAPE: "STOP"
+  pg.K_ESCAPE: "STOP",
+  pg.K_i: "FLIP F",
+  pg.K_j: "FLIP L",
+  pg.K_k: "FLIP B",
+  pg.K_l: "FLIP R"
 }
 
 def _dz_axis_clamp(d_zone: float, val: float, positive: bool=False):
   if positive:
     val = val + 1
-  if d_zone < abs(val) < d_zone:
+  if -d_zone < val < d_zone:
     return 0.0
   return val
 
@@ -233,11 +241,11 @@ class RemoteControl:
         rc_state[_Z_IDX] = self.__btn_acc_curve(self.held_map["ZP"]) - self.__btn_acc_curve(self.held_map["ZM"])
         rc_state[_R_IDX] = self.__btn_acc_curve(self.held_map["RR"]) - self.__btn_acc_curve(self.held_map["RL"])
     elif self.map["Type"] == _AXIS:
-      rc_state[_X_IDX] = _dz_axis_clamp(0.3, self.stick.get_axis(self.map["X"]))
-      rc_state[_Y_IDX] = -_dz_axis_clamp(0.3, self.stick.get_axis(self.map["Y"]))
-      rc_state[_Z_IDX] = -_dz_axis_clamp(0.3, self.stick.get_axis(self.map["Z"]))
+      rc_state[_X_IDX] = _dz_axis_clamp(0.2, self.stick.get_axis(self.map["X"]))
+      rc_state[_Y_IDX] = -_dz_axis_clamp(0.2, self.stick.get_axis(self.map["Y"]))
+      rc_state[_Z_IDX] = -_dz_axis_clamp(0.2, self.stick.get_axis(self.map["Z"]))
       if "R" in self.map:
-        rc_state[_R_IDX] = _dz_axis_clamp(0.3, self.stick.get_axis(self.map["R"]))
+        rc_state[_R_IDX] = _dz_axis_clamp(0.5, self.stick.get_axis(self.map["R"]))
       else:
         rr_val = (1 + self.stick.get_axis(self.map["RR"]))/2
         rl_val = (1 + self.stick.get_axis(self.map["RL"]))/2

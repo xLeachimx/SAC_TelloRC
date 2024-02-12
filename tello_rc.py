@@ -138,13 +138,18 @@ class TelloRC:
     landing_txt = font.render("LANDING", True, (255, 255, 255), (0, 0, 0))
     pic_txt = font.render("TAKING PICTURE", True, (255, 255, 255), (0, 0, 0))
     stop_txt = font.render("SHUTTING DOWN", True, (255, 255, 255), (0, 0, 0))
+    flip_txt = font.render("FLIPPING", True, (255, 255, 255), (0, 0, 0))
+    bat_color = (0, 200, 0)
     # Setup screen
     if not pg.get_init():
       pg.init()
-    screen = pg.display.set_mode((1280, 720))
+    screen_dim = (1280, 720) if self.last_frame is None else (self.frame_width, self.frame_height)
+    screen = pg.display.set_mode(screen_dim)
     while running:
       delta = perf_counter() - run_timer
       if delta >= frame_delta:
+        for event in pg.event.get(pg.QUIT):
+          running = False
         control.update(frame_delta) #make sure we don't spike anything
         self.__send_rc(control.get_rc())
         action = control.next_action()
@@ -155,10 +160,12 @@ class TelloRC:
         # Check state and render battery life
         if self.last_state is not None:
           percentage = int(self.last_state['bat'])
+          if percentage <= 30:
+            bat_color = (200, 0, 0)
           # Draw bounding boxes
           pg.draw.rect(screen, (255, 255, 255), (0, 0, 108, 58))
           pg.draw.rect(screen, (0, 0, 0), (2, 2, 104, 54))
-          pg.draw.rect(screen, (0, 200, 0), (4, 4, percentage, 50))
+          pg.draw.rect(screen, bat_color, (4, 4, percentage, 50))
         if action is not None:
           match action:
             case "TAKEOFF":
@@ -174,6 +181,11 @@ class TelloRC:
               center_x = (screen.get_width() - pic_txt.get_width())//2
               center_y = (screen.get_height() - pic_txt.get_height())//2
               screen.blit(pic_txt, (center_x, center_y))
+            case "FLIP F" | "FLIP B" | "FLIP L" | "FLIP R":
+              if self.flying:
+                center_x = (screen.get_width() - flip_txt.get_width())//2
+                center_y = (screen.get_height() - flip_txt.get_height())//2
+                screen.blit(flip_txt, (center_x, center_y))
             case "STOP":
               center_x = (screen.get_width() - stop_txt.get_width())//2
               center_y = (screen.get_height() - stop_txt.get_height())//2
@@ -193,6 +205,9 @@ class TelloRC:
               date = datetime.today().strftime("%b-%d-%y")
               filename = "pic_" + date + f"-{random.randint(1,10**6)}.jpg"
               cv.imwrite(filename, self.last_frame)
+            case "FLIP F" | "FLIP B" | "FLIP L" | "FLIP R":
+              if self.flying:
+                self.__send_cmd(action.lower())
             case "STOP":
               running = False
             case _:
