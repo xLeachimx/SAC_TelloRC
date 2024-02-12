@@ -57,6 +57,17 @@ _Xbox_Map = {
   "Z": 3,
   "RL": 4,
   "RR": 5,
+  "R": 0
+}
+
+_Xbox_FPS_Map = {
+  "Type": _AXIS,
+  "X": 0,
+  "Y": 3,
+  "Z": 1,
+  "RL": 4,
+  "RR": 5,
+  "R": 2
 }
 
 _Xbox_Action = {
@@ -71,8 +82,8 @@ _Keyboard_Map = {
   "XP": pg.K_d,
   "YM": pg.K_DOWN,
   "YP": pg.K_UP,
-  "ZM": pg.K_w,
-  "ZP": pg.K_s,
+  "ZP": pg.K_w,
+  "ZM": pg.K_s,
   "RL": pg.K_q,
   "RR": pg.K_e
 }
@@ -82,6 +93,13 @@ _Keyboard_Actions = {
   pg.K_p: "PICTURE",
   pg.K_ESCAPE: "STOP"
 }
+
+def _dz_axis_clamp(d_zone: float, val: float, positive: bool=False):
+  if positive:
+    val = val + 1
+  if d_zone < abs(val) < d_zone:
+    return 0.0
+  return val
 
 class RemoteControl:
   # Precond:
@@ -126,7 +144,7 @@ class RemoteControl:
         self.stick = pg.joystick.Joystick(0)
         if not self.stick.get_init():
           self.stick.init()
-        self.map = _Xbox_Map
+        self.map = _Xbox_FPS_Map
         self.action_map = _Xbox_Action
       elif event.type == pg.JOYDEVICEREMOVED and self.mode == "joystick":
         self.mode = "keyboard"
@@ -193,18 +211,21 @@ class RemoteControl:
         if pg.key.get_pressed()[self.map[key]]:
           self.held_map[key] += delta
         else:
-          self.held_map[key] = max(0.0, (self.held_map[key] - 2*delta))
+          self.held_map[key] = 0 #max(0.0, (self.held_map[key] - 2*delta))
         rc_state[_X_IDX] = self.__btn_acc_curve(self.held_map["XP"]) - self.__btn_acc_curve(self.held_map["XM"])
         rc_state[_Y_IDX] = self.__btn_acc_curve(self.held_map["YP"]) - self.__btn_acc_curve(self.held_map["YM"])
         rc_state[_Z_IDX] = self.__btn_acc_curve(self.held_map["ZP"]) - self.__btn_acc_curve(self.held_map["ZM"])
         rc_state[_R_IDX] = self.__btn_acc_curve(self.held_map["RR"]) - self.__btn_acc_curve(self.held_map["RL"])
     elif self.map["Type"] == _AXIS:
-      rc_state[_X_IDX] = round(self.stick.get_axis(self.map["X"]), 1)
-      rc_state[_Y_IDX] = -round(self.stick.get_axis(self.map["Y"]), 1)
-      rc_state[_Z_IDX] = -round(self.stick.get_axis(self.map["Z"]), 1)
-      rr_val = (1 + self.stick.get_axis(self.map["RR"]))/2
-      rl_val = (1 + self.stick.get_axis(self.map["RL"]))/2
-      rc_state[_R_IDX] = (rr_val - rl_val)
+      rc_state[_X_IDX] = _dz_axis_clamp(0.3, self.stick.get_axis(self.map["X"]))
+      rc_state[_Y_IDX] = -_dz_axis_clamp(0.3, self.stick.get_axis(self.map["Y"]))
+      rc_state[_Z_IDX] = -_dz_axis_clamp(0.3, self.stick.get_axis(self.map["Z"]))
+      if "R" in self.map:
+        rc_state[_R_IDX] = _dz_axis_clamp(0.3, self.stick.get_axis(self.map["R"]))
+      else:
+        rr_val = (1 + self.stick.get_axis(self.map["RR"]))/2
+        rl_val = (1 + self.stick.get_axis(self.map["RL"]))/2
+        rc_state[_R_IDX] = (rr_val - rl_val)
     # Align the rc_state with api expectations
     for i in range(len(rc_state)):
       rc_state[i] = max(-100, min(100, int(100 * rc_state[i])))

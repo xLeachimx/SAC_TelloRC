@@ -32,15 +32,20 @@ class TelloRC:
   #   Sets up the required steps for controlling a Tello drone.
   def __init__(self):
     # Addresses
-    self.local_addr = ('', 8889)
-    self.tello_addr = ('192.168.10.1', 8889)
+    self.tello_addr = '192.168.10.1'
+    self.cmd_port = 8889
+    self.state_port = 8890
+    self.video_port = 11111
 
     # Setup channels
     self.send_channel = socket(AF_INET, SOCK_DGRAM)
-    self.send_channel.bind(self.local_addr)
+    self.send_channel.bind(('', self.cmd_port))
+
+    self.state_channel = socket(AF_INET, SOCK_DGRAM)
+    self.state_channel.bind(('', self.state_port))
 
     # Video setup
-    self.video_connect_str = 'udp://192.168.10.1:11111'
+    self.video_connect_str = 'udp://' + self.tello_addr + ":" + str(self.video_port)
     self.video_stream = None
     self.video_thread = Thread(target=self.__receive_video)
     self.video_thread.daemon = True
@@ -55,6 +60,7 @@ class TelloRC:
     self.connected = False
     self.rc_freq = 30
     self.cmd_log = []
+    self.last_state = None
     self.MAX_TIMEOUT = 5
 
     # Threads
@@ -62,6 +68,8 @@ class TelloRC:
     self.send_thread.daemon = True
     self.receive_thread = Thread(target=self.__receive)
     self.receive_thread.daemon = True
+    self.state_thread = Thread(target=self.__receive_state)
+    self.state_thread.daemon = True
 
   # Precond:
   #   None.
@@ -76,8 +84,8 @@ class TelloRC:
     if not self.__connect():
       print("Problem connecting to drone.")
       return False
-    self.active = True
     self.video_start()
+    self.state_thread.start()
     return True
 
   # Precond:
@@ -102,6 +110,14 @@ class TelloRC:
     return self.last_frame
 
   # Precond:
+  #   None.
+  #
+  # Postcond:
+  #   Returns the last received state as a dictionary.
+  def get_state(self):
+    return self.last_state
+
+  # Precond:
   #   None
   #
   # Postcond:
@@ -116,6 +132,12 @@ class TelloRC:
     control = RemoteControl()
     run_timer = perf_counter()
     frame_delta = 1/30
+    # Helpful text
+    font = pg.font.SysFont(pg.font.get_default_font(), 48)
+    takeoff_txt = font.render("TAKING OFF", True, (255, 255, 255), (0, 0, 0))
+    landing_txt = font.render("LANDING", True, (255, 255, 255), (0, 0, 0))
+    pic_txt = font.render("TAKING PICTURE", True, (255, 255, 255), (0, 0, 0))
+    stop_txt = font.render("SHUTTING DOWN", True, (255, 255, 255), (0, 0, 0))
     # Setup screen
     if not pg.get_init():
       pg.init()
@@ -130,6 +152,34 @@ class TelloRC:
         screen.fill((200, 200, 200))
         if self.last_frame is not None:
           screen.blit(pg.image.frombuffer(self.last_frame.tobytes(), self.last_frame.shape[1::-1], "BGR"), (0, 0))
+        # Check state and render battery life
+        if self.last_state is not None:
+          percentage = int(self.last_state['bat'])
+          # Draw bounding boxes
+          pg.draw.rect(screen, (255, 255, 255), (0, 0, 108, 58))
+          pg.draw.rect(screen, (0, 0, 0), (2, 2, 104, 54))
+          pg.draw.rect(screen, (0, 200, 0), (4, 4, percentage, 50))
+        if action is not None:
+          match action:
+            case "TAKEOFF":
+              if not self.flying:
+                center_x = (screen.get_width() - takeoff_txt.get_width())//2
+                center_y = (screen.get_height() - takeoff_txt.get_height())//2
+                screen.blit(takeoff_txt, (center_x, center_y))
+              else:
+                center_x = (screen.get_width() - landing_txt.get_width())//2
+                center_y = (screen.get_height() - landing_txt.get_height())//2
+                screen.blit(landing_txt, (center_x, center_y))
+            case "PICTURE":
+              center_x = (screen.get_width() - pic_txt.get_width())//2
+              center_y = (screen.get_height() - pic_txt.get_height())//2
+              screen.blit(pic_txt, (center_x, center_y))
+            case "STOP":
+              center_x = (screen.get_width() - stop_txt.get_width())//2
+              center_y = (screen.get_height() - stop_txt.get_height())//2
+              screen.blit(stop_txt, (center_x, center_y))
+            case _:
+              pass
         pg.display.flip()
         if action is not None:
           match action:
@@ -207,7 +257,7 @@ class TelloRC:
   #   Returns None if the message failed.
   def __send_cmd(self, msg: str):
     self.cmd_log.append([msg, None])
-    self.send_channel.sendto(msg.encode('utf-8'), self.tello_addr)
+    self.send_channel.sendto(msg.encode('utf-8'), (self.tello_addr, self.cmd_port))
     # Response wait loop
     start = perf_counter()
     while self.cmd_log[-1][1] is None:
@@ -224,7 +274,7 @@ class TelloRC:
   #   Does not wait for a response.
   #   Used (internally) only for sending the emergency signal or rc values.
   def __send_nowait(self, msg):
-    self.send_channel.sendto(msg.encode('utf-8'), self.tello_addr)
+    self.send_channel.sendto(msg.encode('utf-8'), (self.tello_addr, self.cmd_port))
     return None
 
   # Precond:
@@ -241,7 +291,7 @@ class TelloRC:
       except OSError as exc:
         if self.active:
           print("Caught exception socket.error : %s" % exc)
-      except UnicodeDecodeError as dec:
+      except UnicodeDecodeError as _:
         if self.active:
           self.cmd_log[-1][1] = "Decode Error"
           print("Caught exception Unicode 0xcc error.")
@@ -257,6 +307,33 @@ class TelloRC:
       if ret:
         self.last_frame = img
     self.video_stream.release()
+
+  # Precond:
+  #   None.
+  #
+  # Postcond:
+  #   Receives state information from the Tello and logs it.
+  def __receive_state(self):
+    while self.active:
+      try:
+        response, ip = self.state_channel.recvfrom(1024)
+        response = response.decode('utf-8')
+        response = response.strip()
+        vals = response.split(';')
+        state = {}
+        for item in vals:
+            if item == '':
+                continue
+            label, val = item.split(':')
+            state[label] = val
+        self.last_state = state
+      except OSError as exc:
+        if self.active:
+          print("Caught exception socket.error : %s" % exc)
+      except UnicodeDecodeError as _:
+        if self.active:
+          self.cmd_log[-1][1] = "Decode Error"
+          print("Caught exception Unicode 0xcc error.")
 
 if __name__ == "__main__":
   drone = TelloRC()
